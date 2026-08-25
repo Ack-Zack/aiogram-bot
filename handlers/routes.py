@@ -1,82 +1,48 @@
-from aiogram import Router
-# можно определять на какие команды отвечать
+from aiogram import Router, F
 from aiogram.filters import Command
-# классы
-from aiogram.types import Message
-import aiosqlite
+from aiogram.fsm.context import FSMContext
+
+from buttons.salary_button import router as salary_router
+from buttons.add_worker_button import router as add_worker_router
+from buttons.delete_button import router as delete_worker_router
+from buttons.update_salary_button import router as new_salary_router
+from buttons.pay_wages_button import router as pay_wages_router
+from buttons.statistics_button import router as statistics_router
+
+from buttons.inline_buttons import get_main_inline_keyboard
+from handlers.users_data_base import create_table
+
+from aiogram.types import Message, ReplyKeyboardRemove
 
 
-# можно определять на что отвечать
 router = Router()
+#  ДОБАВИТЬ РАБОТНИКА
+router.include_router(add_worker_router)
+# ЗАРПЛАТЫ
+router.include_router(salary_router)
+# УДАЛИТЬ
+router.include_router(delete_worker_router)
+# ОБНОВИТЬ
+router.include_router(new_salary_router)
+# ВЫПЛАТА
+router.include_router(pay_wages_router)
+#  СТАТИСТИКА
+router.include_router(statistics_router)
 
 
-# ---
-
-DB_NAME = 'first_aiosqlite.db'
-
-
-async def init_db():
-    async with aiosqlite.connect(DB_NAME) as db:
-        await db.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            full_name TEXT,
-            age INTEGER
-        );
-        ''')
-        await db.commit()
-
-
-async def add_user(full_name, age):
-    async with aiosqlite.connect(DB_NAME) as db:
-        await db.execute('''
-        INSERT INTO users (full_name, age)
-        VALUES (?, ?)
-        ''', (full_name, age))
-
-        await db.commit()
-
-
-async def get_users():
-    async with aiosqlite.connect(DB_NAME) as db:
-        cursor = await db.execute('SELECT full_name, age FROM users;')
-        result = await cursor.fetchall()
-        return result
-
-# ---
-
-
-# отвечает только на команду /start
-@router.message(Command('start'))
+#  СТАРТ
+@router.message(Command('start'))  # отвечает только на команду /start
+@router.message(F.text.lower() == 'старт')  # отвечает на строку старт
 async def start(message: Message):
-    await init_db()
-    await message.answer('Привет!\nПропишите команду: /reg AGE')
+    await message.answer('Привет! я простой бот для тебя',
+                         reply_markup=get_main_inline_keyboard())
+    await create_table()
 
 
-@router.message(Command('reg'))
-async def reg(message: Message):
-    parts = message.text.strip().split()
-
-    if len(parts) != 2 or not parts[1].isdigit():
-        await message.answer('Ошибка: Неправильный формат')
-        return
-
-    await add_user(message.from_user.full_name, int(parts[1]))
-    await message.answer('Готово!')
-
-
-@router.message(Command('users'))
-async def users(message: Message):
-    users = await get_users()
-
-    if not users:
-        await message.answer('Ошибка: В базе нет пользователей')
-        return
-
-    text = 'Пользователи в базе:\n\n'
-    for full_name, age in users:
-        text += f'- {full_name} - <code>{age}</code>\n'
-
-    await message.answer(text, parse_mode='HTML')
-
+# ОТМЕНА
+@router.message(Command("cancel"))
+@router.message(F.text.casefold() == "отмена")
+async def cancel(message: Message, state: FSMContext):
+    await state.clear()
+    await message.answer("Действие отменено", reply_markup=ReplyKeyboardRemove())
 
